@@ -1,0 +1,198 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 220 20% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 14%;
+
+    --primary: 211 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 220 20% 14%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 14% 46%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 220 20% 14%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 20% 92%;
+    --input: 214 20% 92%;
+    --ring: 211 100% 50%;
+
+    --radius: 0.5rem;
+
+    /* App-specific */
+    --nav-bg: 0 0% 100%;
+    --nav-active-bg: 211 100% 96%;
+    --nav-active-text: 211 100% 50%;
+    --nav-hover-bg: 210 20% 97%;
+
+    --success: 142 72% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 211 100% 50%;
+    --info-foreground: 0 0% 100%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 14% 46%;
+    --sidebar-primary: 211 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 211 100% 96%;
+    --sidebar-accent-foreground: 211 100% 50%;
+    --sidebar-border: 214 20% 92%;
+    --sidebar-ring: 211 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+}
+
+@layer components {
+  /* Nav item */
+  .nav-item-active {
+    background: hsl(var(--nav-active-bg));
+    color: hsl(var(--nav-active-text));
+    font-weight: 600;
+  }
+
+  .nav-item-base {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-r-full text-sm transition-all duration-150 cursor-pointer;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .nav-item-base:hover:not(.nav-item-active) {
+    background: hsl(var(--nav-hover-bg));
+    color: hsl(var(--foreground));
+  }
+
+  /* Status badges */
+  .badge-high {
+    @apply px-3 py-0.5 rounded text-xs font-semibold;
+    background: hsl(0 84% 60%);
+    color: white;
+  }
+  .badge-medium {
+    @apply px-3 py-0.5 rounded text-xs font-semibold;
+    background: hsl(38 92% 50%);
+    color: white;
+  }
+  .badge-low {
+    @apply px-3 py-0.5 rounded text-xs font-semibold;
+    background: hsl(211 100% 50%);
+    color: white;
+  }
+  .badge-critical {
+    @apply px-3 py-0.5 rounded text-xs font-semibold;
+    background: hsl(0 72% 45%);
+    color: white;
+  }
+  .badge-none {
+    @apply px-3 py-0.5 rounded text-xs font-semibold;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Status chips */
+  .status-open {
+    @apply inline-flex items-center gap-1 text-xs font-medium;
+    color: hsl(var(--success));
+  }
+  .status-in-progress {
+    @apply inline-flex items-center gap-1 text-xs font-medium;
+    color: hsl(var(--info));
+  }
+
+  /* Status buttons */
+  .status-btn {
+    @apply flex flex-col items-center gap-1.5 px-5 py-3 rounded-xl border-2 text-xs font-semibold transition-all duration-150 cursor-pointer;
+    border-color: hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+  }
+  .status-btn:hover {
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+  }
+  .status-btn.active {
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary));
+    color: white;
+  }
+
+  /* Card hover */
+  .list-item-hover {
+    @apply transition-colors duration-100 cursor-pointer;
+  }
+  .list-item-hover:hover {
+    background: hsl(var(--muted) / 0.5);
+  }
+  .list-item-hover.selected {
+    background: hsl(var(--primary) / 0.08);
+    border-left: 3px solid hsl(var(--primary));
+  }
+
+  /* Filter chip */
+  .filter-chip {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all cursor-pointer;
+    border-color: hsl(var(--border));
+    color: hsl(var(--primary));
+  }
+  .filter-chip:hover {
+    background: hsl(var(--primary) / 0.05);
+  }
+
+  /* Smooth fade */
+  .fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Donut label badges */
+  .donut-label {
+    @apply inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium;
+  }
+}
