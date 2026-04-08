@@ -1,3 +1,3 @@
-# Welcome to your Lovable project
+# FACILITY MANAGEMENT UI
 
 TODO: Document your project here
