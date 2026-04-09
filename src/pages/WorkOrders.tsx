@@ -310,116 +310,267 @@ export default function WorkOrders() {
             </div>
           ) : (
             /* --- NEW WORK ORDER FORM --- */
-            <div className="max-w-3xl mx-auto p-8">
+            <div className="max-w-4xl mx-auto p-8">
               <h2 className="text-xl font-bold text-slate-900 mb-6">New Work Order</h2>
               
               <div className="space-y-6">
-                {/* Title Input */}
-                <div>
-                  <input 
-                    type="text" 
-                    placeholder="What needs to be done?" 
-                    className="w-full text-lg pb-2 border-b border-slate-300 placeholder-slate-400 focus:outline-none focus:border-[#2563EB]"
-                  />
-                </div>
-
-                {/* Photo Upload */}
-                <div className="w-full h-[120px] rounded-lg border-2 border-dashed border-slate-300 bg-[#F8FAFF] flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50/50">
-                  <ImageIcon className="w-[28px] h-[28px] text-[#2563EB] mb-2" />
-                  <span className="text-sm text-[#2563EB] font-medium">Add or drag pictures</span>
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                  <textarea 
-                    rows={3} 
-                    placeholder="Add a description…" 
-                    className="w-full p-3 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]"
-                  ></textarea>
-                </div>
-
-                {/* Procedure */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Procedure</label>
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 text-center">
-                    <p className="text-sm text-slate-600 mb-3">📋 Create or attach new Form, Procedure or Checklist</p>
-                    <button className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50">+ Add Procedure</button>
-                  </div>
-                </div>
-
-                {/* Assign to */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Assign to</label>
-                  <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
-                    <option value="">Select Assignee...</option>
-                    <option value="rm">Raj Mehta</option>
-                    <option value="sr">Sunita Rao</option>
-                    <option value="an">Arjun Nair</option>
-                  </select>
-                </div>
-
-                {/* Priority */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
-                  <div className="flex space-x-2">
-                    <button className="px-4 py-1.5 text-sm rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50">Low</button>
-                    <button className="px-4 py-1.5 text-sm rounded-full border border-amber-400 bg-amber-50 text-amber-700 font-medium">Medium</button>
-                    <button className="px-4 py-1.5 text-sm rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50">High</button>
-                    <button className="px-4 py-1.5 text-sm rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50">Critical</button>
-                  </div>
-                </div>
-
-                {/* Due Date */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
-                  <input type="date" className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" />
-                </div>
-
-                {/* Location Fields */}
+                {/* General Details */}
                 <div className="border border-slate-200 rounded-md overflow-hidden">
-                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-medium text-slate-800">Location</div>
-                  <div className="p-4 space-y-3">
-                    {["City", "Area Group", "Area", "Property", "Floor", "Zone", "Sub Zone", "Unit"].map((locLabel) => (
-                      <div key={locLabel}>
-                        <label className="block text-xs text-slate-500 mb-1">{locLabel}</label>
-                        <select className="w-full p-2 border border-slate-300 rounded text-sm bg-white focus:outline-none focus:border-[#2563EB]">
-                          <option>Select {locLabel}...</option>
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-medium text-slate-800">General Details</div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">WO Title *</label>
+                        <input type="text" className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" required />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">WO Number</label>
+                        <input type="text" className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-slate-50" readOnly placeholder="Auto-generated" />
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">WO Type *</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]" required>
+                          <option value="">Select Type...</option>
+                          <option>Reactive Maintenance</option>
+                          <option>Planned Preventive</option>
+                          <option>Project</option>
+                          <option>Inspection</option>
+                          <option>Callout</option>
                         </select>
                       </div>
-                    ))}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">WO Sub Type</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Sub Type...</option>
+                          <option>Reactive Maintenance</option>
+                          <option>Planned Preventive</option>
+                          <option>Scheduled</option>
+                          <option>Emergency</option>
+                          <option>AdHoc</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">WO Source</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Source...</option>
+                          <option>Service Request</option>
+                          <option>PM Schedule</option>
+                          <option>Project</option>
+                          <option>Inspection</option>
+                          <option>Manual</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Service Request</label>
+                        <input type="text" className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" placeholder="Select Service Request..." />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Service Category */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Service Category</label>
-                  <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
-                    <option>Select Category...</option>
-                    <option>HVAC/Mechanical</option>
-                    <option>Plumbing</option>
-                    <option>Electrical</option>
-                    <option>Cleaning</option>
-                    <option>Security</option>
-                    <option>IT</option>
-                    <option>Civil</option>
-                  </select>
+                {/* Client & Contract */}
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-medium text-slate-800">Client & Contract</div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Client *</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]" required>
+                          <option value="">Select Client...</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Contract *</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]" required>
+                          <option value="">Select Contract...</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Asset */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Asset</label>
-                  <input 
-                    type="text" 
-                    placeholder="Search by asset name or tag…" 
-                    className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]"
-                  />
+                {/* Property Location */}
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-medium text-slate-800">Property Location</div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Property *</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]" required>
+                          <option value="">Select Property...</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Zone</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Zone...</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Sub Zone</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Sub Zone...</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Base Unit</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Base Unit...</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Reporting Level</label>
+                      <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                        <option value="">Select Reporting Level...</option>
+                        <option>Property</option>
+                        <option>Zone</option>
+                        <option>Sub Zone</option>
+                        <option>Base Unit</option>
+                        <option>Asset</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Submit */}
-                <div className="pt-4">
-                  <button className="w-full py-3 bg-[#2563EB] text-white font-semibold rounded-md hover:bg-blue-700 h-[44px]">
+                {/* Asset & Fault */}
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-medium text-slate-800">Asset & Fault</div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Asset</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Asset...</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Fault Code</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Fault Code...</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Default Priority</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Priority...</option>
+                          <option>P1 - Critical</option>
+                          <option>P2 - High</option>
+                          <option>P3 - Medium</option>
+                          <option>P4 - Low</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Actual Priority *</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]" required>
+                          <option value="">Select Priority...</option>
+                          <option>P1 - Critical</option>
+                          <option>P2 - High</option>
+                          <option>P3 - Medium</option>
+                          <option>P4 - Low</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Priority Change Reason</label>
+                      <textarea rows={2} className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" placeholder="Reason for priority change..."></textarea>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Assignment */}
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-medium text-slate-800">Assignment</div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Assigned To</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Assignee...</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Assigned By</label>
+                        <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]">
+                          <option value="">Select Assigner...</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Reason for Assignment Change</label>
+                      <textarea rows={2} className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" placeholder="Reason for assignment change..."></textarea>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scheduling */}
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-medium text-slate-800">Scheduling</div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Scheduled Start Date</label>
+                        <input type="date" className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Scheduled Start Time</label>
+                        <input type="time" className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Scheduled End Time</label>
+                        <input type="time" className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Planned Duration (min)</label>
+                        <input type="number" className="w-full p-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-[#2563EB]" placeholder="Minutes" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-medium text-slate-800">Status</div>
+                  <div className="p-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">WO Status *</label>
+                      <select className="w-full p-2.5 border border-slate-300 rounded-md text-sm bg-white focus:outline-none focus:border-[#2563EB]" required>
+                        <option value="Draft">Draft</option>
+                        <option value="Open">Open</option>
+                        <option value="Assigned">Assigned</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Pending Parts">Pending Parts</option>
+                        <option value="Pending Approval">Pending Approval</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Closed">Closed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Submit Buttons */}
+                <div className="flex space-x-4 pt-4">
+                  <button className="flex-1 py-3 bg-[#2563EB] text-white font-semibold rounded-md hover:bg-blue-700 h-[44px]">
                     Create Work Order
+                  </button>
+                  <button 
+                    onClick={() => setViewMode("detail")}
+                    className="flex-1 py-3 bg-slate-200 text-slate-700 font-semibold rounded-md hover:bg-slate-300 h-[44px]"
+                  >
+                    Cancel
                   </button>
                 </div>
               </div>
