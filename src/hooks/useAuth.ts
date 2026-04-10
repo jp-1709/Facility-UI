@@ -27,7 +27,7 @@ export const useAuth = () => {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await fetch(`/api/method/login`, {
+      const response = await fetch(`http://10.107.31.184:8080/api/method/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -42,35 +42,46 @@ export const useAuth = () => {
 
       if (response.ok && data.message === 'Logged In') {
         // Get user info after successful login
-        const userResponse = await fetch(`/api/method/frappe.auth.get_logged_user`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        });
-
-        const userData = await userResponse.json();
-
-        if (userResponse.ok) {
-          setAuthState({
-            isAuthenticated: true,
-            user: userData.message,
-            loading: false,
-            error: null,
+        let userData = null;
+        try {
+          const userResponse = await fetch(`http://10.107.31.184:8080/api/method/frappe.auth.get_logged_user`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
           });
-          
-          // Store session in localStorage
-          localStorage.setItem('isAuthenticated', 'true');
-          localStorage.setItem('user', JSON.stringify(userData.message));
-          
-          // Use setTimeout to ensure state is updated before navigation
-          setTimeout(() => {
-            navigate('/', { replace: true });
-          }, 100);
-          
-          return { success: true };
+
+          const userResponseData = await userResponse.json();
+          if (userResponse.ok) {
+            userData = userResponseData.message;
+          } else {
+            console.warn('Failed to fetch user data, proceeding with basic authentication');
+          }
+        } catch (error) {
+          console.warn('Error fetching user data, proceeding with basic authentication:', error);
         }
+
+        // Set authentication state even if user data fetch fails
+        setAuthState({
+          isAuthenticated: true,
+          user: userData,
+          loading: false,
+          error: null,
+        });
+        
+        // Store session in localStorage
+        localStorage.setItem('isAuthenticated', 'true');
+        if (userData) {
+          localStorage.setItem('user', JSON.stringify(userData));
+        }
+        
+        // Navigate immediately after setting auth state
+        setTimeout(() => {
+          navigate('/', { replace: true });
+        }, 100);
+        
+        return { success: true };
       }
 
       throw new Error(data.exc || 'Login failed');
@@ -115,7 +126,7 @@ export const useAuth = () => {
   const checkAuth = useCallback(() => {
     const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
     const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
+    const user = userStr && userStr !== 'undefined' ? JSON.parse(userStr) : null;
 
     console.log('checkAuth - isAuthenticated:', isAuthenticated, 'user:', user);
 

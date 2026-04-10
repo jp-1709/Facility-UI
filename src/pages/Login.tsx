@@ -11,7 +11,7 @@ import { Loader2, Lock, Mail } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z.string().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -72,13 +72,13 @@ const Login = () => {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Username</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
                     id="email"
-                    type="email"
-                    placeholder="Enter your email"
+                    type="text"
+                    placeholder="Enter your username"
                     className="pl-10"
                     {...register('email')}
                     disabled={isSubmitting || loading}

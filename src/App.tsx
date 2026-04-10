@@ -12,7 +12,7 @@ import PlaceholderPage from "@/pages/PlaceholderPage";
 import Requests from "@/pages/Requests";
 import Login from "@/pages/Login";
 import NotFound from "./pages/NotFound";
-import Contracts from "../Contracts";
+import Contracts from "@/pages/Contracts";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
