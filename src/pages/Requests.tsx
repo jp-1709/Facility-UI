@@ -9,7 +9,8 @@ import {
   Search, Plus, Filter, MapPin, Zap, CheckCircle2, ChevronDown, ChevronUp,
   MoreVertical, Pencil, Camera, Send, Link2, QrCode, Copy, X,
   Clock, Mail, Smartphone, MessageSquare, FileText, ChevronRight,
-  RefreshCw, AlertCircle, Loader2,
+  RefreshCw, AlertCircle, Loader2, Activity, Plus as PlusIcon, RotateCcw,
+  ArrowRight,
 } from "lucide-react";
 import { Switch } from "../components/ui/switch";
 
@@ -66,6 +67,24 @@ async function frappeCreate<T>(doctype: string, payload: Partial<T>): Promise<T>
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.exc_type || `POST ${doctype} failed`);
+  }
+  const json = await res.json();
+  return json.data as T;
+}
+
+async function frappeUpdate<T>(doctype: string, name: string, payload: Partial<T>): Promise<T> {
+  const res = await fetch(`${FRAPPE_BASE}/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Frappe-CSRF-Token": getCsrfToken(),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.exc_type || `PUT ${doctype} failed`);
   }
   const json = await res.json();
   return json.data as T;
@@ -134,6 +153,23 @@ interface SRDetail extends SRListItem {
 }
 
 interface FrappeOption { value: string; label: string; }
+
+interface VersionEntry {
+  name: string;
+  owner: string;
+  creation: string;
+  data: string; /* JSON string */
+}
+
+interface ActivityItem {
+  id: string;
+  user: string;
+  action: "updated" | "created" | "worklog" | "comment" | "status";
+  timestamp: string;
+  changes?: { field: string; from: string; to: string }[];
+  message?: string;
+  subject?: string;
+}
 
 /* ═══════════════════════════════════════════
    REUSABLE HOOKS
@@ -241,15 +277,20 @@ function Field({
   label, value, link, badge, badgeClass,
 }: { label: string; value?: string | null; link?: boolean; badge?: boolean; badgeClass?: string }) {
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-border">
-      <span className="text-xs text-muted-foreground font-medium">{label}</span>
-      {badge ? (
-        <span className={`px-2.5 py-0.5 rounded text-xs font-semibold ${badgeClass}`}>{value || "—"}</span>
-      ) : link ? (
-        <span className="text-sm text-primary font-medium cursor-pointer hover:underline">{value || "—"}</span>
-      ) : (
-        <span className="text-sm text-foreground font-medium">{value || "—"}</span>
-      )}
+    <div className="flex flex-col py-3 px-4 hover:bg-muted/30 transition-all rounded-xl group border border-transparent hover:border-border/50">
+      <span className="text-[11px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1">{label}</span>
+      <div className="flex items-center">
+        {badge ? (
+          <span className={`px-2.5 py-1 rounded-md text-xs font-bold shadow-sm ${badgeClass}`}>{value || "—"}</span>
+        ) : link ? (
+          <span className="text-sm text-primary font-semibold cursor-pointer hover:underline decoration-primary/30 underline-offset-4 flex items-center gap-1.5">
+            {value || "—"}
+            {value && <Link2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />}
+          </span>
+        ) : (
+          <span className="text-sm text-foreground font-semibold break-words">{value || "—"}</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -333,6 +374,197 @@ function timeAgo(dateStr: string, timeStr?: string): string {
   const days = Math.floor(hrs / 24);
   if (days === 1) return "Yesterday";
   return `${days}d ago`;
+}
+
+const ACTIVITY_ICON_CFG: Record<ActivityItem["action"], { icon: React.ReactNode; bg: string; text: string }> = {
+  updated:  { icon: <RotateCcw className="w-4 h-4" />, bg: "bg-sky-100",    text: "text-sky-600"    },
+  created:  { icon: <PlusIcon className="w-4 h-4" />,      bg: "bg-emerald-100",text: "text-emerald-600" },
+  worklog:  { icon: <FileText className="w-4 h-4" />,  bg: "bg-violet-100", text: "text-violet-600"  },
+  comment:  { icon: <MessageSquare className="w-4 h-4" />, bg: "bg-amber-100", text: "text-amber-600" },
+  status:   { icon: <Activity className="w-4 h-4" />,  bg: "bg-blue-100",   text: "text-blue-600"   },
+};
+
+function parseVersionData(entry: VersionEntry): ActivityItem {
+  let changes: { field: string; from: string; to: string }[] = [];
+  let action: ActivityItem["action"] = "updated";
+  let message: string | undefined;
+  let subject: string | undefined;
+
+  try {
+    const data = JSON.parse(entry.data);
+    if (data.changed) {
+      changes = data.changed.map(([field, from, to]: [string, string, string]) => ({
+        field: field.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+        from: from ?? "---", to: to ?? "---",
+      }));
+    }
+    if (data.doctype === "Comment") { action = "comment"; message = data.content; }
+    else if (data.doctype === "Worklog") { action = "worklog"; message = data.content; subject = data.subject; }
+    else if (changes.some(c => c.field.toLowerCase().includes("status"))) { action = "status"; }
+  } catch { /* ignore parse errors */ }
+
+  return { id: entry.name, user: entry.owner || "System", action, timestamp: entry.creation, changes, message, subject };
+}
+
+function ActivitySidebar({ srName, onClose }: { srName: string; onClose: () => void }) {
+  const [items, setItems] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newNote, setNewNote] = useState("");
+  const [posting, setPosting] = useState(false);
+
+  useEffect(() => {
+    if (!srName) return;
+    let cancelled = false;
+    setLoading(true);
+    frappeGet<VersionEntry>(
+      "Version",
+      ["name", "owner", "creation", "data"],
+      [["ref_doctype", "=", "Service Request"], ["docname", "=", srName]],
+      "creation desc",
+      100
+    )
+      .then(rows => {
+        if (!cancelled) setItems(rows.map(r => parseVersionData(r)));
+      })
+      .catch((e: unknown) => { if (!cancelled) setError((e as Error).message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [srName]);
+
+  async function addNote() {
+    if (!newNote.trim()) return;
+    setPosting(true);
+    try {
+      await frappeCreate("Comment", {
+        comment_type: "Comment",
+        reference_doctype: "Service Request",
+        reference_name: srName,
+        content: newNote.trim(),
+      });
+      setNewNote("");
+      // add optimistic entry
+      setItems(prev => [{
+        id: `local-${Date.now()}`, user: "You", action: "comment",
+        timestamp: new Date().toISOString(), message: newNote.trim(),
+      }, ...prev]);
+    } catch { /* silent */ }
+    finally { setPosting(false); }
+  }
+
+  return (
+    <div className="w-[360px] min-w-[360px] border-l border-border bg-card flex flex-col h-full">
+      {/* header */}
+      <div className="flex items-center justify-between px-4 py-3.5 border-b border-border bg-card shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Activity className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Activity Log</h3>
+            <p className="text-[11px] text-muted-foreground">{items.length} events</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+          <X className="w-4 h-4 text-muted-foreground" />
+        </button>
+      </div>
+
+      {/* add note */}
+      <div className="px-4 py-3 border-b border-border shrink-0">
+        <div className="flex gap-2">
+          <textarea
+            value={newNote}
+            onChange={e => setNewNote(e.target.value)}
+            placeholder="Add a note or comment…"
+            rows={2}
+            className="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <button
+            onClick={addNote}
+            disabled={!newNote.trim() || posting}
+            className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center justify-center gap-1 self-end">
+            {posting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><PlusIcon className="w-3.5 h-3.5" />Add</>}
+          </button>
+        </div>
+      </div>
+
+      {/* timeline */}
+      <div className="flex-1 overflow-y-auto px-3 py-3">
+        {loading && (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          </div>
+        )}
+        {error && <ErrorBanner message={error} />}
+        {!loading && items.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+            <Activity className="w-8 h-8 opacity-40" />
+            <p className="text-sm">No activity yet</p>
+          </div>
+        )}
+
+        {!loading && items.map((item, idx) => {
+          const iconCfg = ACTIVITY_ICON_CFG[item.action];
+          const isLast = idx === items.length - 1;
+
+          return (
+            <div key={item.id} className="flex gap-3 group">
+              {/* timeline spine */}
+              <div className="flex flex-col items-center shrink-0">
+                <div className={`w-8 h-8 rounded-full ${iconCfg.bg} ${iconCfg.text} flex items-center justify-center mt-0.5`}>
+                  {iconCfg.icon}
+                </div>
+                {!isLast && <div className="w-px flex-1 bg-border mt-1 mb-1" style={{ minHeight: "20px" }} />}
+              </div>
+
+              {/* content */}
+              <div className={`flex-1 min-w-0 ${!isLast ? "pb-4" : "pb-2"}`}>
+                {/* meta row */}
+                <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                  <span className="text-xs font-bold text-primary">{item.user}</span>
+                  <span className="text-xs text-muted-foreground">{item.action}</span>
+                  {item.subject && <span className="text-xs font-semibold text-foreground">{item.subject}</span>}
+                  <span className="text-[11px] text-muted-foreground ml-auto">{timeAgo(item.timestamp)}</span>
+                </div>
+
+                {/* field changes */}
+                {item.changes && item.changes.length > 0 && (
+                  <div className="bg-muted/40 rounded-lg px-3 py-2 space-y-1.5">
+                    {item.changes.map((c, ci) => (
+                      <div key={ci} className="flex items-center gap-1.5 text-xs flex-wrap">
+                        <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                        <span className="font-semibold text-primary">{c.field}</span>
+                        <span className="text-muted-foreground">changed</span>
+                        <span className="font-semibold text-foreground bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono">
+                          {c.from || "---"}
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                          {c.to || "---"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* message / worklog */}
+                {item.message && (
+                  <div className={`text-xs text-foreground rounded-lg px-3 py-2 leading-relaxed mt-1
+                    ${item.action === "comment" ? "bg-amber-50 border border-amber-200" : "bg-violet-50 border border-violet-200"}`}>
+                    {item.message}
+                  </div>
+                )}
+
+                {/* timestamp tooltip */}
+                <p className="text-[10px] text-muted-foreground mt-1">{new Date(item.timestamp).toLocaleString()}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════════════
@@ -672,65 +904,183 @@ function NewRequestForm({
 function DetailView({ srName, onClose }: { srName: string; onClose: () => void }) {
   const { data: sr, loading, error } = useFrappeDoc<SRDetail>("Service Request", srName);
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
+  const [converting, setConverting] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdWorkOrderNumber, setCreatedWorkOrderNumber] = useState("");
+  
   const togglePanel = (key: string) =>
     setCollapsedPanels((p) => ({ ...p, [key]: !p[key] }));
 
-  const CollapsibleSection = ({ title, id, children }: { title: string; id: string; children: React.ReactNode }) => (
-    <div className="border-b border-border">
-      <button onClick={() => togglePanel(id)} className="w-full flex items-center justify-between px-5 py-3 hover:bg-muted/50 transition-colors -mx-5">
-        <span className="text-sm font-semibold text-foreground">{title}</span>
-        {collapsedPanels[id] ? <ChevronRight className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-      </button>
-      {!collapsedPanels[id] && <div className="pb-4 fade-in">{children}</div>}
-    </div>
-  );
+  const CollapsibleSection = ({ title, id, children, defaultOpen = true }: { title: string; id: string; children: React.ReactNode; defaultOpen?: boolean }) => {
+    const isOpen = collapsedPanels[id] === undefined ? defaultOpen : !collapsedPanels[id];
+    return (
+      <div className="mb-5 bg-card border border-border/60 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
+        <button 
+          onClick={() => togglePanel(id)} 
+          className="w-full flex items-center justify-between px-5 py-4 bg-muted/20 hover:bg-muted/40 transition-colors"
+        >
+          <span className="text-sm font-bold text-foreground tracking-tight">{title}</span>
+          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-background border border-border shadow-sm">
+            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-300 ${isOpen ? "rotate-180" : "rotate-0"}`} />
+          </div>
+        </button>
+        <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+          <div className="overflow-hidden">
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {children}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const handleConvertToWorkOrder = async () => {
+    if (!sr || converting) return;
+    
+    setConverting(true);
+    try {
+      // Generate work order number
+      const woNumber = generateID("WO");
+      
+      // Create work order payload from service request data
+      const woPayload = {
+        wo_number: woNumber,
+        wo_title: sr.sr_title,
+        wo_type: "Reactive Maintenance",
+        wo_source: sr.wo_source,
+        status: "Open",
+        actual_priority: sr.priority_actual,
+        default_priority: sr.priority_default,
+        client_code: sr.client_code,
+        client_name: sr.client_name,
+        contract_code: sr.contract_code,
+        contract_group: sr.contract_group,
+        property_code: sr.property_code,
+        property_name: sr.property_name,
+        zone_code: sr.zone_code,
+        sub_zone_code: sr.sub_zone_code,
+        base_unit_code: sr.base_unit_code,
+        asset_code: sr.asset_code,
+        service_group: sr.service_group,
+        fault_category: sr.fault_category,
+        fault_code: sr.fault_code,
+        reporting_level: sr.reporting_level,
+        business_type: sr.business_type,
+        approval_criticality: sr.approval_criticality,
+        sr_number: sr.sr_number,
+        location_full_path: sr.location_full_path,
+        work_done_notes: sr.work_description,
+        response_sla_target: sr.response_sla_target,
+        resolution_sla_target: sr.resolution_sla_target,
+      };
+      
+      // Create the work order
+      const workOrder = await frappeCreate("Work Orders", woPayload);
+      
+      // Update the service request to mark as converted
+      await frappeUpdate("Service Request", srName, {
+        converted_to_wo: 1,
+        status: "Converted"
+      });
+      
+      // Show success animation
+      setCreatedWorkOrderNumber(woNumber);
+      setShowSuccessModal(true);
+      
+      // Close the detail view after animation
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        onClose();
+      }, 3000);
+      
+    } catch (error) {
+      console.error("Failed to convert to work order:", error);
+      alert(`Failed to convert to work order: ${(error as Error).message}`);
+    } finally {
+      setConverting(false);
+    }
+  };
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorBanner message={error} />;
   if (!sr) return null;
 
   return (
-    <div className="fade-in">
-      {/* top bar */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-card">
-        <div>
-          <h2 className="text-xl font-bold text-foreground">{sr.sr_title}</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">{sr.sr_number}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted">
-            <Pencil className="w-3.5 h-3.5" /> Edit
-          </button>
-          <button className="p-1.5 rounded-lg hover:bg-muted">
-            <MoreVertical className="w-4 h-4 text-muted-foreground" />
-          </button>
+    <div className="fade-in bg-muted/10 min-h-full pb-10">
+      {/* Premium Header Container */}
+      <div className="relative px-6 py-8 border-b border-border bg-gradient-to-br from-card to-muted/30 overflow-hidden">
+        {/* Abstract Background Decoration */}
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <span className={`px-2.5 py-1 rounded-md text-xs font-bold shadow-sm ${statusBadge[sr.status] || "bg-muted text-muted-foreground"}`}>
+                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${statusDot[sr.status] || "bg-gray-400"}`} />
+                {sr.status}
+              </span>
+              <span className="text-sm font-semibold text-muted-foreground tracking-wide">{sr.sr_number}</span>
+            </div>
+            <h2 className="text-2xl lg:text-3xl font-extrabold text-foreground tracking-tight leading-tight">{sr.sr_title}</h2>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Activity toggle */}
+            <button
+              onClick={() => setShowActivity(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-lg transition-all
+                ${showActivity ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+              <Activity className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Activity</span>
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 bg-background border border-border/60 hover:border-border text-sm font-semibold text-foreground hover:bg-muted/50 transition-all rounded-xl shadow-sm">
+              <Pencil className="w-4 h-4 text-muted-foreground" /> Edit
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 bg-background border border-border/60 hover:border-border text-sm font-semibold text-foreground hover:bg-muted/50 transition-all rounded-xl shadow-sm">
+              <MoreVertical className="w-4 h-4 text-muted-foreground" /> Actions
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="px-5 py-4">
-        {/* Status & Details */}
-        <CollapsibleSection title="Status & Details" id="status">
-          <Field label="Status" value={sr.status} badge badgeClass={statusBadge[sr.status] || "bg-muted text-muted-foreground"} />
-          <Field label="Response SLA" value={sr.response_sla_status} badge badgeClass={slaBadge[sr.response_sla_status || ""] || "bg-muted text-muted-foreground"} />
-          <Field label="Resolution SLA" value={sr.resolution_sla_status} badge badgeClass={slaBadge[sr.resolution_sla_status || ""] || "bg-muted text-muted-foreground"} />
-          <Field label="Priority" value={priorityShort[sr.priority_actual] || sr.priority_actual} badge badgeClass={priorityClass[sr.priority_actual]} />
+      {/* Top Stat Cards Row */}
+      <div className="px-6 py-6 border-b border-border bg-card">
+        <div className="max-w-6xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 rounded-xl border border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1">Priority</div>
+            <div className={`text-sm font-bold ${priorityClass[sr.priority_actual]}`}>{priorityShort[sr.priority_actual] || sr.priority_actual}</div>
+          </div>
+          <div className="p-4 rounded-xl border border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1">Response SLA</div>
+            <div className={`text-sm font-bold ${slaBadge[sr.response_sla_status || ""] || "text-muted-foreground"}`}>{sr.response_sla_status || "—"}</div>
+          </div>
+          <div className="p-4 rounded-xl border border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1">Created</div>
+            <div className="text-sm font-bold text-foreground">{sr.raised_date ? timeAgo(sr.raised_date, sr.raised_time) : "—"}</div>
+          </div>
+          <div className="p-4 rounded-xl border border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1">Initiator</div>
+            <div className="text-sm font-bold text-foreground">{sr.initiator_type || "—"}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex h-full overflow-hidden">
+        {/* ── MAIN CONTENT ── */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 py-8 max-w-6xl mx-auto">
+        <CollapsibleSection title="Request Details" id="details">
           <Field label="Approval Criticality" value={sr.approval_criticality} />
           <Field label="Request Mode" value={sr.wo_source} />
-          <Field label="Initiator Type" value={sr.initiator_type} />
-          <Field label="Raised Date" value={sr.raised_date} />
-          <Field label="Raised Time" value={sr.raised_time} />
           <Field label="Converted to WO" value={sr.converted_to_wo ? "Yes" : "No"} />
         </CollapsibleSection>
 
-        {/* Client & Contract */}
-        <CollapsibleSection title="Client & Contract" id="client">
+        <CollapsibleSection title="Client & Facility" id="client_location">
           <Field label="Client" value={sr.client_name || sr.client_code} link />
           <Field label="Contract" value={sr.contract_code} link />
           <Field label="Contract Group" value={sr.contract_group} />
-        </CollapsibleSection>
-
-        {/* Location */}
-        <CollapsibleSection title="Location & Routing" id="location">
           <Field label="Property" value={sr.property_name || sr.property_code} link />
           <Field label="Zone" value={sr.zone_code} />
           <Field label="Sub Zone" value={sr.sub_zone_code} />
@@ -738,14 +1088,17 @@ function DetailView({ srName, onClose }: { srName: string; onClose: () => void }
           <Field label="Reporting Level" value={sr.reporting_level} />
           <Field label="Business Type" value={sr.business_type} />
           {sr.location_full_path && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
-              <MapPin className="w-3 h-3" /> {sr.location_full_path}
+            <div className="col-span-1 sm:col-span-2 lg:col-span-3 px-4 py-3 bg-muted/20 rounded-xl border border-border/50 mt-2 flex items-start gap-2.5">
+              <MapPin className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-0.5">Location Path</p>
+                <p className="text-sm font-medium text-foreground">{sr.location_full_path}</p>
+              </div>
             </div>
           )}
         </CollapsibleSection>
 
-        {/* Asset & Fault */}
-        <CollapsibleSection title="Asset & Fault" id="asset">
+        <CollapsibleSection title="Asset & Fault Mapping" id="asset">
           <Field label="Asset" value={sr.asset_code} link />
           <Field label="Service Group" value={sr.service_group} />
           <Field label="Fault Category" value={sr.fault_category} />
@@ -756,28 +1109,29 @@ function DetailView({ srName, onClose }: { srName: string; onClose: () => void }
           )}
         </CollapsibleSection>
 
-        {/* Reporter */}
-        <CollapsibleSection title="Reporter & Contact" id="reporter">
+        <CollapsibleSection title="Reporter & Contact Information" id="reporter">
           <Field label="Reported By" value={sr.reported_by} />
           <Field label="Contact Phone" value={sr.contact_phone} />
-          <Field label="Email" value={sr.requester_email} />
+          <Field label="Email" value={sr.requester_email} link />
           {sr.special_instructions && (
-            <div className="mt-2">
-              <p className="text-xs text-muted-foreground font-medium mb-1">Special Instructions</p>
-              <p className="text-sm text-foreground leading-relaxed">{sr.special_instructions}</p>
+            <div className="col-span-1 sm:col-span-2 lg:col-span-3 mt-3 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <p className="text-[11px] uppercase tracking-wider text-amber-600/80 font-bold mb-1 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" /> Special Instructions
+              </p>
+              <p className="text-sm text-foreground leading-relaxed font-medium">{sr.special_instructions}</p>
             </div>
           )}
         </CollapsibleSection>
 
-        {/* Description (auto-generated) */}
         {sr.work_description && (
           <CollapsibleSection title="Work Description" id="desc">
-            <p className="text-sm text-foreground leading-relaxed">{sr.work_description}</p>
+            <div className="col-span-1 sm:col-span-2 lg:col-span-3 px-4 py-2">
+              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{sr.work_description}</p>
+            </div>
           </CollapsibleSection>
         )}
 
-        {/* SLA */}
-        <CollapsibleSection title="SLA & Scheduling" id="sla">
+        <CollapsibleSection title="SLA & Scheduling" id="sla" defaultOpen={false}>
           <Field label="Appointment Date" value={sr.appointment_date} />
           <Field label="Preferred Date & Time" value={sr.preferred_datetime} />
           <Field label="Response SLA Target" value={sr.response_sla_target} />
@@ -786,35 +1140,44 @@ function DetailView({ srName, onClose }: { srName: string; onClose: () => void }
           <Field label="Resolution SLA Actual" value={sr.resolution_sla_actual} />
         </CollapsibleSection>
 
-        {/* Notifications */}
-        <div className="border-b border-border py-4">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Notifications</h3>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-foreground flex items-center gap-2">
-                <Mail className="w-4 h-4 text-muted-foreground" /> Email Notification
-              </span>
-              <Switch checked={!!sr.notification_email} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+          {/* Notifications Panel */}
+          <div className="bg-card border border-border/60 rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" /> Notification Settings
+            </h3>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <Mail className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-foreground">Email Notifications</span>
+                </div>
+                <Switch checked={!!sr.notification_email} />
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                    <Smartphone className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-foreground">SMS Notifications</span>
+                </div>
+                <Switch checked={!!sr.notification_sms} />
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-foreground flex items-center gap-2">
-                <Smartphone className="w-4 h-4 text-muted-foreground" /> SMS Notification
-              </span>
-              <Switch checked={!!sr.notification_sms} />
-            </div>
+          </div>
+
+          {/* Internal Notes Panel */}
+          <div className="bg-card border border-border/60 rounded-2xl shadow-sm p-5 flex flex-col">
+            <h3 className="text-sm font-bold text-foreground mb-3">Internal Notes</h3>
+            <textarea
+              className="w-full flex-1 px-4 py-3 border border-border/50 rounded-xl text-sm bg-muted/10 hover:bg-muted/20 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors resize-none"
+              placeholder="Add internal notes for your team here..."
+            />
           </div>
         </div>
 
-        {/* Internal notes */}
-        <div className="border-b border-border py-4">
-          <h3 className="text-sm font-semibold text-foreground mb-2">Internal Notes</h3>
-          <textarea
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring min-h-[80px] resize-none"
-            placeholder="Add internal notes…"
-          />
-        </div>
-
-        {/* Closure */}
         {(sr.customer_rating || sr.remarks) && (
           <CollapsibleSection title="Closure & Feedback" id="closure">
             <Field label="Customer Rating" value={sr.customer_rating} />
@@ -822,15 +1185,96 @@ function DetailView({ srName, onClose }: { srName: string; onClose: () => void }
           </CollapsibleSection>
         )}
 
-        {/* Convert to WO */}
-        {!sr.converted_to_wo && (
-          <div className="py-5">
-            <button className="w-full py-3 border-2 border-primary text-primary rounded-lg text-sm font-bold hover:bg-primary hover:text-primary-foreground transition-all flex items-center justify-center gap-2">
-              <ChevronRight className="w-4 h-4" /> Convert to Work Order
-            </button>
+          {!sr.converted_to_wo && (
+            <div className="mt-8 mb-4">
+              <button 
+                onClick={handleConvertToWorkOrder}
+                disabled={converting}
+                className="w-full relative group overflow-hidden py-4 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-primary to-primary/80" />
+                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-primary/80 to-primary opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <span className="relative z-10 flex items-center justify-center gap-2 text-primary-foreground">
+                  {converting ? <><Loader2 className="w-4 h-4 animate-spin" /> Converting...</> : <>Convert to Work Order <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" /></>}
+                </span>
+              </button>
+            </div>
+          )}
           </div>
+        </div>
+
+        {/* ── ACTIVITY SIDEBAR ── */}
+        {showActivity && (
+          <ActivitySidebar srName={srName} onClose={() => setShowActivity(false)} />
         )}
       </div>
+
+      {/* SUCCESS ANIMATION MODAL */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative">
+            {/* Confetti effect */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="confetti-container">
+                {[...Array(12)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="confetti-piece absolute w-2 h-2 animate-bounce"
+                    style={{
+                      left: `${Math.random() * 100}%`,
+                      top: `${Math.random() * 100}%`,
+                      backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'][Math.floor(Math.random() * 6)],
+                      animationDelay: `${Math.random() * 0.5}s`,
+                      animationDuration: `${1 + Math.random() * 0.5}s`
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            
+            {/* Success card */}
+            <div className="relative bg-white rounded-3xl p-12 shadow-2xl animate-scaleIn mx-4 max-w-sm w-full">
+              {/* Animated checkmark */}
+              <div className="flex justify-center mb-6">
+                <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center animate-pulse">
+                  <svg
+                    className="w-10 h-10 text-white animate-checkmark"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+              </div>
+              
+              {/* Success text */}
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2 animate-slideUp">
+                  Work Order Created!
+                </h2>
+                <p className="text-gray-600 mb-4 animate-slideUp" style={{ animationDelay: '0.1s' }}>
+                  Your service request has been successfully converted
+                </p>
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-full font-semibold animate-slideUp" style={{ animationDelay: '0.2s' }}>
+                  <span className="text-xs">WO#</span>
+                  <span className="font-mono">{createdWorkOrderNumber}</span>
+                </div>
+              </div>
+              
+              {/* Loading dots */}
+              <div className="flex justify-center gap-2 mt-6 animate-slideUp" style={{ animationDelay: '0.3s' }}>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1093,4 +1537,104 @@ export default function Requests() {
       )}
     </div>
   );
+}
+
+/* ═══════════════════════════════════════════
+   CUSTOM ANIMATIONS
+═══════════════════════════════════════════ */
+
+// Add these styles to your global CSS or in a style tag
+const customStyles = `
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes checkmark {
+  0% {
+    stroke-dasharray: 0 100;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 100 100;
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dasharray: 100 100;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-100vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.animate-slideUp {
+  animation: slideUp 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-checkmark {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: checkmark 0.6s ease-in-out 0.3s forwards;
+}
+
+.confetti-piece {
+  animation: confettiFall 2s ease-in forwards;
+}
+
+.confetti-container {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  pointer-events: none;
+}
+`;
+
+// Inject styles into the document head
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement('style');
+  styleSheet.type = 'text/css';
+  styleSheet.innerText = customStyles;
+  document.head.appendChild(styleSheet);
 }
